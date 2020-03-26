@@ -84,13 +84,13 @@ def plot_slices(slices, save_path):
     for i in range(num_of_plot_row):
         for j in range(num_of_plot_col):
             idx = i * num_of_plot_col + j
+            plots[i, j].axis('off')
+            plots[i, j].imshow(slices[idx], cmap='gray')
             if idx == slices.shape[0]-1:
                 plt.savefig(save_path)
                 print(f'save figure to "{save_path}"')
                 plt.close()
                 return
-            plots[i, j].axis('off')
-            plots[i, j].imshow(slices[idx], cmap='gray')
 
 
 def get_segent_slice(slice, thres_method='mean'):
