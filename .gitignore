@@ -1,3 +1,6 @@
-*/*.idea
+*.idea
+*.zip
 hw1/Assignment_Template
 hw1/CT_chest_scans
+hw2/BIA_Assignment_2_Dataset-All/
+hw2/saves/
