@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-import torch.optim as optim
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, recall_score
 
@@ -21,20 +20,19 @@ def evaluate_log(predicts, true_labels):
     print(f'recall-score: {recall_score_}')
 
 
-def model_fit(model, optimizer, args, train_loader, test_loader, model_name):
-    best_top1 = 0
+def model_fit(model, optimizer, args, train_loader, test_loader, best_top1):
     for epoch in range(args.start_epoch, args.epochs):
-        top1 = train_epoch(model, optimizer, args, train_loader, epoch)
+        train_epoch(model, optimizer, args, train_loader, epoch)
+        top1 = test_epoch(model, args, test_loader)
         if top1 > best_top1:
-            save_model(model, optimizer, epoch, args.save_model_path + f'{model_name}_checkpoint.tar')
-        test_epoch(model, args, test_loader)
+            save_model(model, optimizer, epoch, args.save_model_path, best_top1)
+            best_top1 = top1
 
 
 def train_epoch(model, optimizer, args, train_loader, epoch):
     losses = AvgMeter()
     accuracies = AvgMeter()
     model.train()
-
     for batch_idx, (data, target) in enumerate(train_loader, start=1):
         data, target = data.to(args.device), target.to(args.device)
         optimizer.zero_grad()
@@ -48,26 +46,31 @@ def train_epoch(model, optimizer, args, train_loader, epoch):
         if batch_idx % args.log_interval == 0:
             done = batch_idx * len(data)
             percentage = 100. * batch_idx / len(train_loader)
-            print(f'Train Epoch: {epoch}\t[{done:5}/{len(train_loader.dataset)}({percentage:3.0f}%)]\t'
-                  f'Loss: {losses.mean:.6f}\tAccuracy: {accuracies.mean:.3f}')
+            print(f'Train Epoch: {epoch}\t[{done:5}/{len(train_loader.dataset)}({percentage:3.0f}%)]\tLoss: {losses.mean:.6f}\tAccuracy: {accuracies.mean:.3f}')
     return accuracies.mean
 
 
-def test_epoch(model, args, test_loader):
+def test_epoch(model, args, test_loader, get_predicts=False):
     model.eval()
     test_loss = 0
     correct = 0
+    predicts = list()
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(args.device), target.to(args.device)
             output = model(data)
             test_loss += F.cross_entropy(output, target).item()  # sum up batch loss
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
+            if get_predicts:
+                predicts += list(pred.cpu().numpy().reshape(-1))
             correct += pred.eq(target.data.view_as(pred)).sum().item()
         test_loss /= len(test_loader.dataset)
         accuracy = 100. * correct / len(test_loader.dataset)
         print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
-    return accuracy
+    if get_predicts:
+        return accuracy, predicts
+    else:
+        return accuracy
 
 
 def accuracy(output, target, topk=(1,)):
@@ -83,19 +86,22 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 
-def save_model(model, optimizer, epoch, path):
+def save_model(model, optimizer, epoch, path, best_top1):
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
+        'best_top1': best_top1
     }, path)
 
 
-def load_model(model, optimizer, path, args):
+def load_model(model, optimizer, args, path):
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     args.start_epoch = checkpoint['epoch']
+    best_top1 = checkpoint['best_top1']
+    return best_top1
 
 
 class AvgMeter:

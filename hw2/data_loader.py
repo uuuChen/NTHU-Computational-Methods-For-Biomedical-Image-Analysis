@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data.dataset import Dataset
 from pydicom import dcmread
 import torch
-import matplotlib.pyplot as plt
+import random
 import torchvision.transforms as transforms
 
 
@@ -18,7 +18,7 @@ class CBIS_DDSM_Dataset(Dataset):
         self.labelstr2int = {'BENIGN': 0, 'BENIGN_WITHOUT_CALLBACK': 0, 'MALIGNANT': 1}
         self.method2attrname = {'mask': 'cropped image file path', 'crop': 'ROI mask file path',
                                 'ori': 'image file path'}
-        self.attr_name = self.method2attrname[method]
+        self.attr_name = self.method2attrname[method]  # file path attribute name
         self.image_paths_with_labels = self._get_image_paths_with_labels(self.csv_df, balance=data_balance)
 
     def __getitem__(self, index):
@@ -27,26 +27,9 @@ class CBIS_DDSM_Dataset(Dataset):
         image_data = image_ds.pixel_array.astype(np.float32) / np.max(image_ds.pixel_array)
         if self.transform:
             image_data = self.transform(image_data)
-        transforms.ToPILImage()(image_data).convert('LA').show()
+            self.first_image = False
+        # transforms.ToPILImage()(image_data).convert('LA').show()
         return image_data, image_label
-
-    # def __getitem__(self, index):
-    #     csv_image_file_path_list = self.csv_df.loc[index, self.attr_name].split('/')
-    #     image_dir_name, image_file_name = csv_image_file_path_list[0].strip(), csv_image_file_path_list[-1].strip()
-    #     image_label = self.labelstr2int[self.csv_df.loc[index, 'pathology']]
-    #     image_file_path = None
-    #     for dirPath, dirNames, fileNames in os.walk(os.path.join(self.root_dir, self.dataset_dir_name, image_dir_name)):
-    #         if not dirNames:  # in the last directory
-    #             image_file_path = os.path.join(dirPath, image_file_name)
-    #             break
-    #     if not image_file_path:
-    #         raise Exception
-    #     image_ds = dcmread(image_file_path)
-    #     image_data = image_ds.pixel_array.astype(np.float32) / np.max(image_ds.pixel_array)
-    #     if self.transform:
-    #         image_data = self.transform(image_data)
-    #     # transforms.ToPILImage()(image_data).convert('LA').show()
-    #     return image_data, image_label
 
     def __len__(self):
         return len(self.csv_df)
@@ -68,6 +51,12 @@ class CBIS_DDSM_Dataset(Dataset):
                 raise Exception
             image_paths.append((image_file_path, label))
             label2imgpath.setdefault(label, list()).append(image_file_path)
+        if balance:
+            less_label, more_label = (0, 1) if len(label2imgpath[0]) < len(label2imgpath[1]) else (1, 0)
+            diff_between_labels = len(label2imgpath[more_label]) - len(label2imgpath[less_label])
+            less_image_paths = label2imgpath[less_label]
+            for i in range(diff_between_labels):
+                image_paths.append((less_image_paths[random.randint(0, len(less_image_paths)-1)], less_label))
         return image_paths
 
 
